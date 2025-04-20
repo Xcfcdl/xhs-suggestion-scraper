@@ -1,3 +1,5 @@
+// Author: Dony (GitHub: @Xcfcdl, Email: dony.chi@outlook.com)
+
 const XHS_EXPLORE_URL = "https://www.xiaohongshu.com/explore";
 
 chrome.action.onClicked.addListener(async (tab) => {

@@ -3,12 +3,13 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.1
 // @description  在小红书探索页面获取搜索下拉建议词
-// @author       Your Name
+// @author       Dony (GitHub: @Xcfcdl, Email: dony.chi@outlook.com)
 // @match        https://www.xiaohongshu.com/explore*
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @require      https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js
+// @homepageURL  https://github.com/Xcfcdl
 // ==/UserScript==
 
 (function() {

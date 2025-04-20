@@ -1,3 +1,5 @@
+// Author: Dony (GitHub: @Xcfcdl, Email: dony.chi@outlook.com)
+
 'use strict';
 
 // --- 配置 ---\n

@@ -3,6 +3,7 @@
   "name": "小红书下拉词获取器",
   "version": "1.0",
   "description": "在小红书探索页面获取搜索下拉建议词",
+  "author": "Dony (GitHub: @Xcfcdl, Email: dony.chi@outlook.com)",
   "permissions": [
     "storage",
     "scripting",
