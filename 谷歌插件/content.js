@@ -2,6 +2,35 @@
 
 'use strict';
 
+// --- 全局变量用于存储输入框防抖计时器ID ---
+let keywordInputChangeTimeoutId = null;
+
+// --- 防抖函数 (修改版) ---
+function debounce(func, wait) {
+    let timeout; // Local timeout reference for this specific debouncer instance
+    return function executedFunction(...args) {
+        const context = this;
+        const later = () => {
+            timeout = null; // Clear local reference
+            // Only clear global ID if it matches the one from this execution context
+            // This prevents a newer debounce call from clearing an older one's global ID prematurely
+            if (keywordInputChangeTimeoutId === timeout) {
+                 keywordInputChangeTimeoutId = null;
+            }
+            func.apply(context, args);
+        };
+        // Clear the previous global timer associated with keyword input
+        clearTimeout(keywordInputChangeTimeoutId);
+        // Clear the local timer for this specific debouncer instance
+        clearTimeout(timeout);
+
+        // Set the new timer
+        timeout = setTimeout(later, wait);
+        // Store the new timer ID globally
+        keywordInputChangeTimeoutId = timeout;
+    };
+}
+
 // --- 配置 ---\n
 const INPUT_DELAY = 150; // 模拟输入的字符间延迟 (ms)\n
 const SUGGESTION_WAIT_TIMEOUT = 3000; // 等待建议出现的最长时间 (ms)\n
@@ -12,12 +41,15 @@ let allSuggestions = new Set();
 let isRunning = false;
 let isPaused = false; // New state for pausing
 let currentKeywordIndex = 0; // New state for tracking progress
+let processedCountInBatch = 0; // 跟踪处理的批次
 let containerVisible = true; // Default visibility
 let uiCreated = false; // Flag to track UI creation
 let observer = null; // Reference to the MutationObserver
 
 // --- UI 元素引用 ---
 let container, toggleButton, keywordInput, runButton, stopButton, resumeButton, resetButton, statusDiv, resultOutput, exportButton, headerDiv, showButton;
+// --- 新增 UI 元素引用 ---
+let delayPerWordInput, delayPerBatchInput, saveDelaySettingsBtn, delaySaveStatus;
 
 // --- UI 创建 ---\n
 function createUI() {
@@ -46,6 +78,70 @@ function createUI() {
 
     const content = document.createElement('div');
     content.className = 'xhs-content'; // Use class
+
+    // --- 延迟设置区域 ---
+    const delaySettingsDiv = document.createElement('div');
+    delaySettingsDiv.className = 'xhs-delay-settings'; // Class for styling
+
+    // -- 第一个延迟项 (标签 + 输入) --
+    const delayItem1 = document.createElement('div');
+    delayItem1.className = 'xhs-delay-item';
+
+    const delayPerWordLabel = document.createElement('label');
+    delayPerWordLabel.textContent = '每词延迟(ms):';
+    delayPerWordLabel.htmlFor = 'xhs-delay-per-word';
+
+    delayPerWordInput = document.createElement('input');
+    delayPerWordInput.type = 'number';
+    delayPerWordInput.id = 'xhs-delay-per-word';
+    delayPerWordInput.min = '0';
+    delayPerWordInput.step = '100';
+    delayPerWordInput.placeholder = '500'; // Shorter placeholder
+
+    delayItem1.appendChild(delayPerWordLabel);
+    delayItem1.appendChild(delayPerWordInput);
+
+    // -- 第二个延迟项 (标签 + 输入) --
+    const delayItem2 = document.createElement('div');
+    delayItem2.className = 'xhs-delay-item';
+
+    const delayPerBatchLabel = document.createElement('label');
+    delayPerBatchLabel.textContent = '每10词延迟(ms):';
+    delayPerBatchLabel.htmlFor = 'xhs-delay-per-batch';
+
+    delayPerBatchInput = document.createElement('input');
+    delayPerBatchInput.type = 'number';
+    delayPerBatchInput.id = 'xhs-delay-per-batch';
+    delayPerBatchInput.min = '0';
+    delayPerBatchInput.step = '100';
+    delayPerBatchInput.placeholder = '3000'; // Shorter placeholder
+
+    delayItem2.appendChild(delayPerBatchLabel);
+    delayItem2.appendChild(delayPerBatchInput);
+
+    // -- 保存按钮和状态 --
+    const delayControlsDiv = document.createElement('div');
+    delayControlsDiv.className = 'xhs-delay-controls'; // Wrapper for button and status
+
+    saveDelaySettingsBtn = document.createElement('button');
+    saveDelaySettingsBtn.id = 'xhs-save-delay-btn';
+    saveDelaySettingsBtn.textContent = '保存延迟设置';
+
+    delaySaveStatus = document.createElement('span');
+    delaySaveStatus.id = 'xhs-delay-save-status';
+
+    delayControlsDiv.appendChild(saveDelaySettingsBtn);
+    delayControlsDiv.appendChild(delaySaveStatus);
+
+    // -- 将各项添加到设置容器 --
+    delaySettingsDiv.appendChild(delayItem1);
+    delaySettingsDiv.appendChild(delayItem2);
+    delaySettingsDiv.appendChild(delayControlsDiv);
+
+    // --- 结束：延迟设置区域 ---
+
+    // --- 添加延迟设置到 content ---
+    content.appendChild(delaySettingsDiv);
 
     const inputLabel = document.createElement('label');
     inputLabel.textContent = '输入关键词 (每行一个):';
@@ -97,7 +193,6 @@ function createUI() {
     exportButton.id = 'xhs-export-button';
     exportButton.textContent = '导出 TXT';
 
-
     content.appendChild(inputLabel);
     content.appendChild(keywordInput);
     content.appendChild(runButton);
@@ -120,7 +215,11 @@ function createUI() {
     resumeButton.addEventListener('click', resumeScraping);
     resetButton.addEventListener('click', resetScraping);
     exportButton.addEventListener('click', exportResults);
-    keywordInput.addEventListener('input', handleKeywordInputChange);
+    // --- 新增：使用防抖处理输入变化 ---
+    const debouncedHandleKeywordInputChange = debounce(handleKeywordInputChange, 500); // 500ms 延迟
+    keywordInput.addEventListener('input', debouncedHandleKeywordInputChange);
+    // --- 结束：使用防抖处理输入变化 ---
+    saveDelaySettingsBtn.addEventListener('click', saveDelaySettings);
 
     // --- 拖动功能 ---\n
     makeDraggable(container, headerDiv);
@@ -199,16 +298,23 @@ function loadAndApplyState() {
         containerVisible = result.containerVisible !== undefined ? result.containerVisible : true;
         setContainerVisibility(containerVisible);
 
-        // Load saved suggestions
+        // Load saved suggestions if any
         if (result.savedSuggestions && Array.isArray(result.savedSuggestions)) {
             allSuggestions = new Set(result.savedSuggestions);
             updateResultsDisplay();
-            console.log(`[XHS Scraper] Loaded ${allSuggestions.size} suggestions from storage.`);
-            updateStatus(`已加载 ${allSuggestions.size} 条历史结果。状态：待机`);
-        } else {
-            updateStatus('状态：待机');
+            console.log('[XHS Scraper] Loaded saved suggestions:', allSuggestions.size);
         }
     });
+    // --- 新增：加载延迟设置 ---
+    chrome.storage.sync.get({ delayPerWord: 500, delayPerBatch: 3000 }, (settings) => {
+         if (delayPerWordInput && delayPerBatchInput) { // Ensure UI is created
+             delayPerWordInput.value = settings.delayPerWord;
+             delayPerBatchInput.value = settings.delayPerBatch;
+             console.log('[XHS Scraper] Loaded delay settings:', settings);
+         } else {
+             console.warn('[XHS Scraper] Delay input fields not found when trying to load settings.');
+         }
+     });
 }
 
 function setContainerVisibility(visible) {
@@ -321,13 +427,11 @@ function resetScraping(triggeredByInputChange = false) { // Accept optional flag
 function handleKeywordInputChange() {
     // Reset only if not actively running (i.e., idle or paused)
     if (!isRunning || isPaused) {
-        // Small delay to avoid resetting on every single keystroke if typing fast,
-        // although resetting on input change is usually fine.
-        // Consider adding a debounce function here if needed, but for now, direct reset is simpler.
-        console.log('[XHS Scraper] Keyword input changed while not actively running. Resetting state.');
+        console.log('[XHS Scraper] Keyword input changed (debounced). State is idle/paused. Resetting state.');
         resetScraping(true); // Pass flag to indicate source
+    } else {
+        console.log('[XHS Scraper] Keyword input changed (debounced), but scraper is active (running and not paused). Reset is ignored.');
     }
-    // If it IS actively running, the input is disabled anyway, so this shouldn't trigger.
 }
 
 // 更新 toggleButtons 以处理暂停状态
@@ -357,47 +461,51 @@ function toggleButtons(running, paused) {
 
 // 重命名 runScraping 为 startScraping，并调用新的循环函数
 async function startScraping() {
+    // 添加日志以记录当前状态
+    console.log(`[XHS Scraper] startScraping called. Current state: isRunning=${isRunning}, isPaused=${isPaused}`);
+
     if (isRunning) {
-        updateStatus("已经在运行中或已暂停...");
+        const statusMessage = isPaused ? "当前已暂停，请点击继续或重置。" : "已经在运行中，请等待完成或暂停/重置。";
+        updateStatus(statusMessage);
+        console.warn('[XHS Scraper] startScraping called while already running/paused.');
         return;
     }
-    isRunning = true;
+
+    // --- 取消待处理的输入框重置 --- 
+    if (keywordInputChangeTimeoutId) {
+        clearTimeout(keywordInputChangeTimeoutId);
+        keywordInputChangeTimeoutId = null;
+        console.log('[XHS Scraper] Canceled pending keyword input reset timer before starting.');
+    }
+
+    // --- 强制重置运行状态，确保干净的起点 ---
+    isRunning = false;
     isPaused = false;
-    // currentKeywordIndex = 0; // Reset index only on explicit reset or natural completion
-    // Decide whether to clear results on start? For now, we append.
-    // If you want to clear results every time you press Start:
-    // allSuggestions.clear();
-    // updateResultsDisplay();
-
-    toggleButtons(true, false); // Running = true, Paused = false
-
+    
     const searchInput = document.querySelector("#search-input");
 
     if (!keywordInput || !resultOutput || !searchInput || !statusDiv) {
         updateStatus("错误：无法找到必要的页面或插件元素！");
-        isRunning = false;
-        toggleButtons(false, false);
         return;
     }
 
     const keywords = keywordInput.value.split('\n').map(k => k.trim()).filter(k => k);
     if (keywords.length === 0) {
         updateStatus("请输入至少一个关键词");
-        isRunning = false;
-        toggleButtons(false, false);
         return;
     }
-    if (currentKeywordIndex >= keywords.length) {
-        currentKeywordIndex = 0; // Start from beginning if previously completed
-        allSuggestions.clear(); // Clear results if starting over after completion
-        updateResultsDisplay();
-        updateStatus("列表已完成，重新开始...");
-    }
+    
+    currentKeywordIndex = 0;  // 重置当前关键词索引
+    processedCountInBatch = 0;  // 重置批处理计数器
 
-    updateStatus(`准备处理 ${keywords.length - currentKeywordIndex} 个关键词 (从第 ${currentKeywordIndex + 1} 个开始)...`);
-    await delay(500);
+    // --- 设置运行状态并更新 UI ---
+    console.log('[XHS Scraper] Validation passed, starting scraper now.');
+    isRunning = true;  // 设置运行状态为 true
+    toggleButtons(true, false);  // 更新按钮状态
 
-    processKeywordsLoop(); // Start the processing loop
+    updateStatus(`准备处理 ${keywords.length} 个关键词...`);
+
+    processKeywordsLoop(); // 开始处理循环
 }
 
 // 新的循环处理函数
@@ -473,6 +581,30 @@ async function processKeywordsLoop() {
                 updateStatus(`(${i + 1}/${keywords.length}) 等待建议超时 for "${keyword}"`);
             }
 
+            // --- 应用延迟 ---
+            processedCountInBatch++;
+            const settings = await chrome.storage.sync.get({ delayPerWord: 500, delayPerBatch: 3000 });
+            const delayPerWord = parseInt(settings.delayPerWord, 10) || 500;
+            const delayPerBatch = parseInt(settings.delayPerBatch, 10) || 3000;
+
+            // Minimum delay of 10ms to prevent issues
+            const effectiveDelayPerWord = Math.max(10, delayPerWord);
+            const effectiveDelayPerBatch = Math.max(10, delayPerBatch);
+
+            // Delay after each keyword
+            if (i < keywords.length - 1) { // Don't delay after the very last keyword
+                updateStatus(`处理完毕: ${keyword}. 等待 ${effectiveDelayPerWord}ms...`);
+                await delay(effectiveDelayPerWord);
+
+                // Longer delay every 10 keywords
+                if (processedCountInBatch >= 10) {
+                    updateStatus(`已连续处理 10 个词，休息 ${effectiveDelayPerBatch}ms...`);
+                    await delay(effectiveDelayPerBatch);
+                    processedCountInBatch = 0; // Reset batch counter
+                }
+            }
+            // --- 结束延迟应用 ---
+
         } catch (error) {
             updateStatus(`(${i + 1}/${keywords.length}) 处理 "${keyword}" 时出错: ${error.message}`);
             console.error(`[XHS Scraper] Error processing ${keyword}:`, error);
@@ -536,6 +668,32 @@ function exportResults() {
         if (url) {
             URL.revokeObjectURL(url);
         }
+    }
+}
+
+// --- 新增：保存延迟设置 ---
+async function saveDelaySettings() {
+    const delayPerWord = parseInt(delayPerWordInput.value, 10);
+    const delayPerBatch = parseInt(delayPerBatchInput.value, 10);
+
+    if (isNaN(delayPerWord) || delayPerWord < 0 || isNaN(delayPerBatch) || delayPerBatch < 0) {
+        delaySaveStatus.textContent = '请输入有效的非负数字!';
+        delaySaveStatus.style.color = 'red';
+        setTimeout(() => delaySaveStatus.textContent = '', 3000);
+        return;
+    }
+
+    try {
+        await chrome.storage.sync.set({ delayPerWord, delayPerBatch });
+        delaySaveStatus.textContent = '已保存!';
+        delaySaveStatus.style.color = 'green';
+        console.log('[XHS Scraper] Delay settings saved:', { delayPerWord, delayPerBatch });
+        setTimeout(() => delaySaveStatus.textContent = '', 2000);
+    } catch (error) {
+        delaySaveStatus.textContent = '保存失败!';
+        delaySaveStatus.style.color = 'red';
+        console.error('[XHS Scraper] Error saving delay settings:', error);
+        setTimeout(() => delaySaveStatus.textContent = '', 3000);
     }
 }
 

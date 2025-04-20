@@ -45,17 +45,16 @@
 /* Generic button style within header */
 #xhs-sug-scraper-container .xhs-header button {
     padding: 4px 10px; /* Adjust padding */
-    border: 1px solid var(--border-color);
+    border: none;
     border-radius: 6px; /* Consistent rounding */
     cursor: pointer;
-    background-color: var(--background-white);
-    color: var(--text-secondary);
+    background-color: var(--xhs-red);
+    color: white;
     font-size: 13px;
-    transition: background-color 0.2s ease, border-color 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 #xhs-sug-scraper-container .xhs-header button:hover {
-    background-color: var(--background-light);
-    border-color: #ccc;
+    opacity: 0.85;
 }
 
 #xhs-sug-scraper-container .xhs-content {
@@ -184,27 +183,114 @@
 /* Style for the show button */
 #xhs-show-button {
     position: fixed;
-    bottom: 30px;
+    top: 50%;
     right: 30px;
+    transform: translateY(-50%);
     z-index: 9998;
     background-color: var(--background-white);
-    border: none; /* Remove border */
+    border: none;
     border-radius: 50%;
-    padding: 8px; /* Adjust padding around icon */
+    padding: 8px;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15); /* Refined shadow */
-    display: none; /* Initially hidden */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    display: none;
     line-height: 0;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 #xhs-show-button:hover {
-    transform: scale(1.1); /* Add slight scale on hover */
+    transform: translateY(-50%) scale(1.05);
     box-shadow: 0 6px 16px rgba(0,0,0,0.2);
 }
 
 #xhs-show-button img {
     display: block;
-    width: 28px; /* Slightly smaller icon */
-    height: 28px;
+    width: 32px;
+    height: 32px;
+}
+
+/* --- 延迟设置区域样式 (已移至顶部) --- */
+
+.xhs-delay-settings {
+    margin-bottom: 15px; /* Reduce spacing below */
+    display: flex;
+    flex-wrap: wrap; /* Allow wrapping if container is too narrow */
+    justify-content: space-between; /* Space out items */
+    align-items: center; /* Align items vertically */
+    gap: 10px; /* Reduce overall gap */
+}
+
+/* Style for each label + input pair */
+.xhs-delay-item {
+    display: flex;
+    align-items: center;
+    gap: 4px; /* Reduce space between label and input */
+}
+
+/* Label style within the item */
+.xhs-delay-item label {
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+/* Input style within the item */
+.xhs-delay-item input[type="number"] {
+    width: 60px;
+    margin-right: 0;
+    padding: 4px 6px;
+}
+
+/* Container for save button and status message */
+.xhs-delay-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    flex-basis: 100%;
+    justify-content: flex-end;
+    margin-top: 3px;
+}
+
+/* Adjust specific label style if needed */
+.xhs-delay-settings label {
+    margin-right: 0;
+    font-size: 12px;
+    font-weight: normal;
+    color: var(--text-secondary);
+}
+
+/* Adjust specific input style */
+.xhs-delay-settings input[type="number"] {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 12px;
+    box-sizing: border-box;
+}
+
+.xhs-delay-settings input[type="number"]:focus {
+    outline: none;
+    border-color: var(--xhs-red);
+    box-shadow: 0 0 0 2px var(--focus-ring-color);
+}
+
+/* Style the save button */
+#xhs-save-delay-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border-color);
+    background-color: var(--background-white);
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+    margin-left: 0;
+}
+
+#xhs-save-delay-btn:hover {
+    background-color: var(--background-light);
+    border-color: #ccc;
+}
+
+#xhs-delay-save-status {
+    font-size: 11px;
 }
